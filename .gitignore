@@ -7,5 +7,6 @@ build/
 .cache/
 *.log
 verification-*.png
+verification/
 *-deploy.zip
 *.zip

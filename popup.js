@@ -519,8 +519,29 @@ function installRenderedCaptureHelper() {
     };
 
     function findMainScrollableElement() {
-      let maxArea = 0;
-      let target = document.scrollingElement || document.documentElement;
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+      const viewportArea = viewportWidth * viewportHeight;
+      const root = document.scrollingElement || document.documentElement;
+      const doc = document.documentElement;
+      const body = document.body;
+      const rootScrollWidth = Math.max(
+        viewportWidth,
+        doc.scrollWidth,
+        body ? body.scrollWidth : 0,
+        doc.offsetWidth,
+        body ? body.offsetWidth : 0
+      );
+      const rootScrollHeight = Math.max(
+        viewportHeight,
+        doc.scrollHeight,
+        body ? body.scrollHeight : 0,
+        doc.offsetHeight,
+        body ? body.offsetHeight : 0
+      );
+      const rootCanScrollY = rootScrollHeight > viewportHeight + 20;
+      const rootCanScrollX = rootScrollWidth > viewportWidth + 20;
+      const candidates = [];
 
       document.querySelectorAll('*').forEach((el) => {
         const style = window.getComputedStyle(el);
@@ -531,15 +552,38 @@ function installRenderedCaptureHelper() {
 
         if ((scrollableY || scrollableX) && (canScrollY || canScrollX) && el.clientHeight > 120) {
           const rect = el.getBoundingClientRect();
-          const area = Math.max(0, rect.width) * Math.max(0, rect.height);
-          if (area > maxArea) {
-            maxArea = area;
-            target = el;
-          }
+          const visibleWidth = Math.max(
+            0,
+            Math.min(rect.right, viewportWidth) - Math.max(rect.left, 0)
+          );
+          const visibleHeight = Math.max(
+            0,
+            Math.min(rect.bottom, viewportHeight) - Math.max(rect.top, 0)
+          );
+          const visibleArea = visibleWidth * visibleHeight;
+          const widthCoverage = visibleWidth / Math.max(1, viewportWidth);
+          const heightCoverage = visibleHeight / Math.max(1, viewportHeight);
+
+          if (visibleArea < viewportArea * 0.25) return;
+          if (widthCoverage < 0.45 || heightCoverage < 0.45) return;
+
+          const scrollGain =
+            Math.max(0, el.scrollHeight - el.clientHeight) +
+            Math.max(0, el.scrollWidth - el.clientWidth);
+          candidates.push({
+            el,
+            score: visibleArea + scrollGain * 0.25,
+            coverage: visibleArea / Math.max(1, viewportArea)
+          });
         }
       });
 
-      return target;
+      if (rootCanScrollY || (rootCanScrollX && candidates.length === 0)) {
+        return root;
+      }
+
+      candidates.sort((a, b) => b.score - a.score);
+      return candidates[0] ? candidates[0].el : root;
     }
 
     function makePositions(max, step) {
